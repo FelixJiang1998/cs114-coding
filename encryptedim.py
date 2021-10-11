@@ -6,21 +6,18 @@ import socket
 import sys
 import signal
 
-
 # define some globals
 HOST = ''
 PORT = 9999
 SOCKET_LIST = []
 
 
-
-def handler(signum,frame):
+def handler(signum, frame):
     """ handle a SIGINT (ctrl-C) keypress """
-    for s in SOCKET_LIST:                 #close all sockets
+    for s in SOCKET_LIST:  # close all sockets
         s.close()
     sys.exit(0)
 
-    
 
 def wait_for_incoming_connection():
     """
@@ -38,17 +35,16 @@ def wait_for_incoming_connection():
     return conn
 
 
-def connect_to_host( dst ):
+def connect_to_host(dst):
     """ connects to the host 'dst' """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s.connect( (dst,PORT) )
+        s.connect((dst, PORT))
         SOCKET_LIST.append(s)
         return s
     except socket.error:
-        print( "Could not connect to %s." % dst )
+        print("Could not connect to %s." % dst)
         sys.exit(0)
-    
 
 
 def parse_command_line():
@@ -56,10 +52,10 @@ def parse_command_line():
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--c", dest="dst", help="destination address")
     parser.add_argument("-s", "--s", dest="server", action="store_true",
-                    default=False, help="start server mode")
+                        default=False, help="start server mode")
 
     options = parser.parse_args()
- 
+
     if not options.dst and not options.server:
         parser.print_help()
         parser.error("must specify either server or client mode")
@@ -72,32 +68,32 @@ if __name__ == "__main__":
     options = parse_command_line()
 
     # catch when the user presses CTRL-C
-    signal.signal(signal.SIGINT,handler)
+    signal.signal(signal.SIGINT, handler)
 
     if options.server:
         s = wait_for_incoming_connection()
     elif options.dst:
         s = connect_to_host(options.dst)
     else:
-        assert(False)                         # this shouldn't happen
+        assert (False)  # this shouldn't happen
 
-    rlist = [ s, sys.stdin ]
+    rlist = [s, sys.stdin]
     wlist = []
     xlist = []
 
     while True:
-        (r, w, x) = select.select(rlist,wlist,xlist)
-        if s in r:                            # there is data to read from network
+        (r, w, x) = select.select(rlist, wlist, xlist)
+        if s in r:  # there is data to read from network
             data = s.recv(1024)
             data = data.decode("utf-8")
-            if data == "":                    # other side ended connection
+            if data == "":  # other side ended connection
                 break
             sys.stdout.write(data)
             sys.stdout.flush()
-            
-        if sys.stdin in r:                    # there is data to read from stdin
+
+        if sys.stdin in r:  # there is data to read from stdin
             data = sys.stdin.readline()
-            if data == "":                    # we closed STDIN
+            if data == "":  # we closed STDIN
                 break
             s.send(str.encode(data))
 
@@ -108,4 +104,4 @@ if __name__ == "__main__":
     for sock in SOCKET_LIST:
         sock.close()
 
-    sys.exit(0)                           # all's well that ends well!
+    sys.exit(0)  # all's well that ends well!
