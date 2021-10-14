@@ -3,6 +3,12 @@ import socket
 import argparse
 import sys
 import signal
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import unpad
+from Crypto.Hash import SHA256
+from Crypto.Random import get_random_bytes
+from Crypto.Hash import HMAC
 
 global inputs, outputs, server
 
@@ -20,7 +26,26 @@ def server_exit_handle(signum, frame):
     exit(0)
 
 
-def run_server(listen_port):
+def encrypt(plaintext, key, iv):
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    ciphertext = cipher.encrypt(pad(plaintext, AES.block_size))
+
+    return ciphertext
+
+
+def decrypt(ciphertext, key, iv):
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)
+    return plaintext
+
+
+def handle_k1_k2(k1, k2):
+    e_k1 = SHA256.new(data=k1.encode("utf-8"))
+    e_k2 = SHA256.new(data=k2.encode("utf-8"))
+    return e_k1, e_k2
+
+
+def run_server(listen_port, confkey, authkey):
     global inputs, outputs, server
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -28,7 +53,7 @@ def run_server(listen_port):
     server.listen(5)
     server.setblocking(False)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # print("Server ready,listening on", listen_port)
+    print("Server ready,listening on", listen_port)
 
     # readable list
     inputs = [server, sys.stdin]
@@ -90,14 +115,14 @@ def client_exit_handle(signum, frame):
     exit(0)
 
 
-def run_client(hostname, call_port):
+def run_client(hostname, port, k1, k2):
     global inputs
-    # print(hostname, call_port)
+    print(hostname, port)
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect((hostname, call_port))
+    client.connect((hostname, port))
     client.setblocking(False)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # print("Server connected.")
+    print("Server connected.")
     inputs = [client, sys.stdin, ]  # why other obj except socket cannot added in?
 
     # listen to signal
@@ -118,7 +143,13 @@ def run_client(hostname, call_port):
                         exit(0)
                 else:  # sys.stdin
                     data = input()
-                    client.sendall(data.encode("utf-8"))
+                    # todo encrypt
+                    p1 = iv = get_random_bytes(AES.block_size)
+                    p2 = e_len_m = encrypt(len(data), k1, iv)
+                    p3 = HMAC.new(k2, e_len_m, digestmod=SHA256).digest()
+                    p4 = e_m = encrypt(data, k1, iv)
+                    p5 = HMAC.new(k2, e_m, digestmod=SHA256).digest()
+                    client.send(p1+p2+p3+p4+p5)
             # error handling
             for e in errors:
                 inputs.remove(e)
@@ -137,11 +168,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='HW1_P1')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--s', help='launch as server', action="store_true")
-    group.add_argument('--c', nargs=1, help='launch as client')
+    group.add_argument('--c', dest="dst", help='launch as client')
+
+    parser.add_argument("--confkey", dest="confkey", help="confidentiality key", required=True)
+    parser.add_argument("--authkey", dest="authkey", help="authenticity key", required=True)
+
     args = parser.parse_args()
 
     port = 9999  # fixed
     if args.s:
-        run_server(port)
+        run_server(port, args.confkey, args.authkey)
     else:
-        run_client(args.c[0], port)
+        run_client(args.dst, port, args.confkey, args.authkey)
