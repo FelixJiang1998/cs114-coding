@@ -77,7 +77,6 @@ def parse_command_line():
 
 def encrypt(plaintext, key, iv):
     cipher = AES.new(key, AES.MODE_CBC, iv)
-    # ciphertext = cipher.encrypt(pad(plaintext, AES.block_size))
     ciphertext = cipher.encrypt(pad(plaintext, AES.block_size))
 
     return ciphertext
@@ -122,7 +121,7 @@ if __name__ == "__main__":
         (r, w, x) = select.select(rlist, wlist, xlist)
         if s in r:  # there is data to read from network
             data = s.recv(1024 * 8)
-            if data == "":  # other side ended connection
+            if len(data) == 0:  # other side ended connection
                 break
             cursor = AES.block_size
             p1 = iv = data[:cursor]
@@ -130,36 +129,34 @@ if __name__ == "__main__":
             cursor += AES.block_size
             len_m = int(decrypt(Ek_len_m, k1, iv).decode("utf-8"))
 
-            p3 = send_auth = data[cursor:cursor + AES.block_size]
-            cursor += AES.block_size
+            p3 = send_auth = data[cursor:cursor + AES.block_size*2]
+            cursor += AES.block_size*2
 
             cipher_length = AES.block_size * (len_m // AES.block_size + 1)
 
-            p4 = cipher_text = data[cursor:cipher_length]
+            p4 = cipher_text = data[cursor:cursor+cipher_length]
+            # print(p4)
             cursor += cipher_length
             p5 = data[cursor:]
 
             try:
                 hmac = HMAC.new(k2, Ek_len_m, digestmod=SHA256)
                 hmac.verify(send_auth)
+
+                hmac = HMAC.new(k2, p4, digestmod=SHA256)
+                hmac.verify(p5)
+
             except ValueError:
                 print("ERROR: HMAC verification failed")
                 break
 
             message = decrypt(cipher_text, k1, iv)
-            try:
-                hmac = HMAC.new(k2, message, digestmod=SHA256)
-                hmac.verify(p5)
-            except ValueError:
-                print("ERROR: HMAC verification failed")
-                break
 
             sys.stdout.write(message.decode("utf-8"))
             sys.stdout.flush()
 
         if sys.stdin in r:  # there is data to read from stdin
-            # data = sys.stdin.readline()
-            data = input()
+            data = sys.stdin.readline()
             if data == "":  # we closed STDIN
                 break
 
@@ -168,11 +165,8 @@ if __name__ == "__main__":
             p3 = HMAC.new(k2, e_len_m, digestmod=SHA256).digest()
             p4 = e_m = encrypt(data.encode("utf-8"), k1, iv)
             p5 = HMAC.new(k2, e_m, digestmod=SHA256).digest()
-            s.send(p1)
-            s.send(p2)
-            s.send(p3)
-            s.send(p4)
-            s.send(p5)
+            s.send(p1 + p2 + p3 + p4 + p5)
+
         if s in x:
             break
     """
