@@ -75,16 +75,24 @@ def parse_command_line():
     return options
 
 
-def encrypt(plaintext, key, iv):
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    ciphertext = cipher.encrypt(pad(plaintext, AES.block_size))
+def encrypt(plaintext, key):
+    p1 = iv = get_random_bytes(AES.block_size)
 
-    return ciphertext
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    # ciphertext = cipher.encrypt(pad(plaintext, AES.block_size))
+
+    data_length = len(plaintext)
+
+    p2 = e_len_m = cipher.encrypt(pad(str(data_length).encode(), AES.block_size))
+    p3 = HMAC.new(authkey, iv + e_len_m, digestmod=SHA256).digest()
+    p4 = e_m = cipher.encrypt(pad(plaintext, AES.block_size))
+    p5 = HMAC.new(authkey, e_m, digestmod=SHA256).digest()
+
+    return p1 + p2 + p3 + p4 + p5
 
 
 def decrypt(ciphertext, key, iv):
     cipher = AES.new(key, AES.MODE_CBC, iv)
-
     plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)
     return plaintext
     # return cipher.decrypt(ciphertext)
@@ -115,7 +123,7 @@ if __name__ == "__main__":
     xlist = []
 
     # handle k1 and k2 with sha256
-    k1, k2 = handle_k1_k2(options.confkey, options.authkey)
+    confkey, authkey = handle_k1_k2(options.confkey, options.authkey)
 
     while True:
         (r, w, x) = select.select(rlist, wlist, xlist)
@@ -127,30 +135,30 @@ if __name__ == "__main__":
             p1 = iv = data[:cursor]
             p2 = Ek_len_m = data[cursor:cursor + AES.block_size]
             cursor += AES.block_size
-            len_m = int(decrypt(Ek_len_m, k1, iv).decode("utf-8"))
+            len_m = int(decrypt(Ek_len_m, confkey, iv).decode("utf-8"))
 
-            p3 = send_auth = data[cursor:cursor + AES.block_size*2]
-            cursor += AES.block_size*2
+            p3 = send_auth = data[cursor:cursor + AES.block_size * 2]
+            cursor += AES.block_size * 2
 
             cipher_length = AES.block_size * (len_m // AES.block_size + 1)
 
-            p4 = cipher_text = data[cursor:cursor+cipher_length]
+            p4 = cipher_text = data[cursor:cursor + cipher_length]
             # print(p4)
             cursor += cipher_length
             p5 = data[cursor:]
 
             try:
-                hmac = HMAC.new(k2, Ek_len_m, digestmod=SHA256)
+                hmac = HMAC.new(authkey, iv + Ek_len_m, digestmod=SHA256)
                 hmac.verify(send_auth)
 
-                hmac = HMAC.new(k2, p4, digestmod=SHA256)
+                hmac = HMAC.new(authkey, p4, digestmod=SHA256)
                 hmac.verify(p5)
 
             except ValueError:
                 print("ERROR: HMAC verification failed")
                 break
 
-            message = decrypt(cipher_text, k1, iv)
+            message = decrypt(cipher_text, confkey, iv)
 
             sys.stdout.write(message.decode("utf-8"))
             sys.stdout.flush()
@@ -160,12 +168,7 @@ if __name__ == "__main__":
             if data == "":  # we closed STDIN
                 break
 
-            p1 = iv = get_random_bytes(AES.block_size)
-            p2 = e_len_m = encrypt(str(len(data)).encode(), k1, iv)
-            p3 = HMAC.new(k2, e_len_m, digestmod=SHA256).digest()
-            p4 = e_m = encrypt(data.encode("utf-8"), k1, iv)
-            p5 = HMAC.new(k2, e_m, digestmod=SHA256).digest()
-            s.send(p1 + p2 + p3 + p4 + p5)
+            s.send(encrypt(data, confkey))
 
         if s in x:
             break
