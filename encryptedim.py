@@ -78,13 +78,13 @@ def parse_command_line():
 def encrypt(plaintext, key):
     p1 = iv = get_random_bytes(AES.block_size)
 
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    # ciphertext = cipher.encrypt(pad(plaintext, AES.block_size))
-
     data_length = len(plaintext)
 
+    cipher = AES.new(key, AES.MODE_CBC, iv)
     p2 = e_len_m = cipher.encrypt(pad(str(data_length).encode(), AES.block_size))
     p3 = HMAC.new(authkey, iv + e_len_m, digestmod=SHA256).digest()
+
+    cipher = AES.new(key, AES.MODE_CBC, iv)
     p4 = e_m = cipher.encrypt(pad(plaintext, AES.block_size))
     p5 = HMAC.new(authkey, e_m, digestmod=SHA256).digest()
 
