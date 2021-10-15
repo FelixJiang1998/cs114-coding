@@ -1,4 +1,5 @@
-# hw1p1.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 import argparse
 
@@ -87,11 +88,12 @@ def encrypt(plaintext, key):
     cipher = AES.new(key, AES.MODE_CBC, iv)
 
     # the following line seems important to create a new cipher
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    p4 = e_m = cipher.encrypt(pad(plaintext.encode("utf-8"), AES.block_size))
-    p5 = HMAC.new(authkey, e_m, digestmod=SHA256).digest()
+    p4 = new_iv = get_random_bytes(AES.block_size)
+    cipher = AES.new(key, AES.MODE_CBC, new_iv)
+    p5 = e_m = cipher.encrypt(pad(plaintext.encode("utf-8"), AES.block_size))
+    p6 = HMAC.new(authkey, e_m, digestmod=SHA256).digest()
 
-    return p1 + p2 + p3 + p4 + p5
+    return p1 + p2 + p3 + p4 + p5 + p6
 
 
 def decrypt(ciphertext, key, iv):
@@ -136,8 +138,8 @@ if __name__ == "__main__":
             data = s.recv(1024 * 8)
             if len(data) == 0:  # other side ended connection
                 break
+            p1 = iv = data[:AES.block_size]
             cursor = AES.block_size
-            p1 = iv = data[:cursor]
             p2 = Ek_len_m = data[cursor:cursor + AES.block_size]
             cursor += AES.block_size
             len_m = int(decrypt(Ek_len_m, confkey, iv).decode("utf-8"))
@@ -146,24 +148,24 @@ if __name__ == "__main__":
             cursor += AES.block_size * 2
 
             cipher_length = AES.block_size * (len_m // AES.block_size + 1)
-
-            p4 = cipher_text = data[cursor:cursor + cipher_length]
+            p4= new_iv = data[cursor:cursor+AES.block_size]
+            p5 = cipher_text = data[cursor:cursor + cipher_length]
             # print(p4)
             cursor += cipher_length
-            p5 = data[cursor:]
+            p6 = data[cursor:]
 
             try:
                 hmac = HMAC.new(authkey, iv + Ek_len_m, digestmod=SHA256)
                 hmac.verify(send_auth)
 
-                hmac = HMAC.new(authkey, p4, digestmod=SHA256)
-                hmac.verify(p5)
+                hmac = HMAC.new(authkey, p5, digestmod=SHA256)
+                hmac.verify(p6)
 
             except ValueError:
                 print("ERROR: HMAC verification failed")
                 break
 
-            message = decrypt(cipher_text, confkey, iv)
+            message = decrypt(cipher_text, confkey, p4)
 
             sys.stdout.write(message.decode("utf-8"))
             sys.stdout.flush()
