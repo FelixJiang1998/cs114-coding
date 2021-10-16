@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# hw1p1.py
 
 import argparse
 
@@ -148,7 +147,8 @@ if __name__ == "__main__":
             cursor += AES.block_size * 2
 
             cipher_length = AES.block_size * (len_m // AES.block_size + 1)
-            p4= new_iv = data[cursor:cursor+AES.block_size]
+            p4 = new_iv = data[cursor:cursor + AES.block_size]
+            cursor += AES.block_size
             p5 = cipher_text = data[cursor:cursor + cipher_length]
             # print(p4)
             cursor += cipher_length
@@ -165,7 +165,7 @@ if __name__ == "__main__":
                 print("ERROR: HMAC verification failed")
                 break
 
-            message = decrypt(cipher_text, confkey, p4)
+            message = decrypt(cipher_text, confkey, new_iv)
 
             sys.stdout.write(message.decode("utf-8"))
             sys.stdout.flush()
