@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# hw1p1.py
 
 import argparse
 
@@ -165,7 +164,7 @@ if __name__ == "__main__":
                 print("ERROR: HMAC verification failed")
                 break
 
-            message = decrypt(cipher_text, confkey, p4)
+            message = decrypt(cipher_text, confkey, new_iv)
 
             sys.stdout.write(message.decode("utf-8"))
             sys.stdout.flush()
